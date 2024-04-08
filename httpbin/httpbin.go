@@ -3,6 +3,7 @@ package httpbin
 import (
 	"bytes"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -121,6 +122,23 @@ func (h *HTTPBin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Assert that HTTPBin implements http.Handler interface
 var _ http.Handler = &HTTPBin{}
 
+type versioned struct {
+	handler http.Handler
+}
+
+func NewVersioned(h http.Handler) *versioned {
+	return &versioned{handler: h}
+}
+
+// Note: We're injecting version and instance headers for all requests here
+// useful for debugging and testing.
+func (v *versioned) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("instance", os.Getenv("HOSTNAME"))
+	w.Header().Set("version", os.Getenv("SERVICE_VERSION"))
+
+	v.handler.ServeHTTP(w, r)
+}
+
 // Handler returns an http.Handler that exposes all HTTPBin endpoints
 func (h *HTTPBin) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -212,7 +230,7 @@ func (h *HTTPBin) Handler() http.Handler {
 		handler = observe(h.Observer, handler)
 	}
 
-	return handler
+	return NewVersioned(handler)
 }
 
 func (h *HTTPBin) setExcludeHeaders(excludeHeaders string) {
